@@ -1,0 +1,5 @@
+# Code owners for open-claude
+# These users will be requested for review and can approve PRs
+
+# Default owners for everything in the repo
+* @tkattkat
