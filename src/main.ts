@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, session, globalShortcut, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, session, globalShortcut, screen, dialog } from 'electron';
+import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL, prepareAttachmentPayload } from './api/client';
@@ -442,6 +443,45 @@ ipcMain.handle('star-conversation', async (_event, convId: string, isStarred: bo
   }
 
   return result.data;
+});
+
+// Export conversation to Markdown
+ipcMain.handle('export-conversation-markdown', async (_event, conversationData: { title: string; messages: Array<{ role: string; content: string; timestamp?: string }> }) => {
+  const { title, messages } = conversationData;
+
+  // Build markdown content
+  let markdown = `# ${title || 'Conversation'}\n\n`;
+  markdown += `_Exported on ${new Date().toLocaleString()}_\n\n---\n\n`;
+
+  for (const msg of messages) {
+    const role = msg.role === 'human' ? 'You' : 'Claude';
+    const timestamp = msg.timestamp ? ` _(${new Date(msg.timestamp).toLocaleString()})_` : '';
+    markdown += `## ${role}${timestamp}\n\n`;
+    markdown += `${msg.content}\n\n---\n\n`;
+  }
+
+  // Show save dialog
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    title: 'Export Conversation',
+    defaultPath: `${title || 'conversation'}.md`,
+    filters: [
+      { name: 'Markdown', extensions: ['md'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled || !result.filePath) {
+    return { success: false, canceled: true };
+  }
+
+  // Write file
+  try {
+    fs.writeFileSync(result.filePath, markdown, 'utf-8');
+    return { success: true, filePath: result.filePath };
+  } catch (error) {
+    console.error('Failed to write file:', error);
+    return { success: false, error: 'Failed to write file' };
+  }
 });
 
 // Upload file attachments (prepare metadata only)
