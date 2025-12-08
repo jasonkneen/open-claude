@@ -1,20 +1,10 @@
-import { spawn, ChildProcess } from 'child_process';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { EventEmitter } from 'events';
 import type { MCPServerConfig } from '../types';
 
-// Sanitize args by stripping surrounding quotes
-function sanitizeArgs(args: string[]): string[] {
-  return args.map(arg => {
-    // Strip surrounding single or double quotes
-    if ((arg.startsWith('"') && arg.endsWith('"')) ||
-        (arg.startsWith("'") && arg.endsWith("'"))) {
-      return arg.slice(1, -1);
-    }
-    return arg;
-  });
-}
-
-// MCP Protocol Types
+// Tool type from SDK
 interface MCPTool {
   name: string;
   description?: string;
@@ -25,43 +15,23 @@ interface MCPTool {
   };
 }
 
-interface MCPServerInfo {
-  name: string;
-  version: string;
-  capabilities?: {
-    tools?: boolean;
-    resources?: boolean;
-    prompts?: boolean;
-  };
-}
-
-interface JSONRPCRequest {
-  jsonrpc: '2.0';
-  id: number;
-  method: string;
-  params?: unknown;
-}
-
-interface JSONRPCResponse {
-  jsonrpc: '2.0';
-  id: number;
-  result?: unknown;
-  error?: {
-    code: number;
-    message: string;
-    data?: unknown;
-  };
-}
-
 interface MCPConnection {
   config: MCPServerConfig;
-  process: ChildProcess | null;
+  client: Client;
+  transport: StdioClientTransport | SSEClientTransport;
   tools: MCPTool[];
-  serverInfo: MCPServerInfo | null;
   isConnected: boolean;
-  pendingRequests: Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>;
-  requestId: number;
-  buffer: string;
+}
+
+// Sanitize args by stripping surrounding quotes
+function sanitizeArgs(args: string[]): string[] {
+  return args.map(arg => {
+    if ((arg.startsWith('"') && arg.endsWith('"')) ||
+        (arg.startsWith("'") && arg.endsWith("'"))) {
+      return arg.slice(1, -1);
+    }
+    return arg;
+  });
 }
 
 class MCPClient extends EventEmitter {
@@ -80,91 +50,80 @@ class MCPClient extends EventEmitter {
 
     console.log(`[MCP] Connecting to server: ${config.name}`);
 
-    const connection: MCPConnection = {
-      config,
-      process: null,
-      tools: [],
-      serverInfo: null,
-      isConnected: false,
-      pendingRequests: new Map(),
-      requestId: 0,
-      buffer: ''
-    };
-
     try {
-      // Spawn the MCP server process
-      const env = { ...process.env, ...config.env };
-      const sanitizedArgs = sanitizeArgs(config.args || []);
-      console.log(`[MCP ${config.name}] Command: ${config.command}`);
-      console.log(`[MCP ${config.name}] Args: ${JSON.stringify(sanitizedArgs)}`);
-      const proc = spawn(config.command, sanitizedArgs, {
-        env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: process.platform === 'win32'
-      });
+      let transport: StdioClientTransport | SSEClientTransport;
 
-      connection.process = proc;
+      // Check if this is an HTTP/SSE endpoint
+      if (config.command.startsWith('http://') || config.command.startsWith('https://')) {
+        // SSE transport for HTTP endpoints
+        console.log(`[MCP ${config.name}] Using SSE transport: ${config.command}`);
+        transport = new SSEClientTransport(new URL(config.command));
+      } else {
+        // Stdio transport for local commands
+        const sanitizedArgs = sanitizeArgs(config.args || []);
+        console.log(`[MCP ${config.name}] Using stdio transport`);
+        console.log(`[MCP ${config.name}] Command: ${config.command}`);
+        console.log(`[MCP ${config.name}] Args: ${JSON.stringify(sanitizedArgs)}`);
 
-      // Track early exit to fail fast
-      let exitError: Error | null = null;
+        transport = new StdioClientTransport({
+          command: config.command,
+          args: sanitizedArgs,
+          env: config.env ? { ...process.env, ...config.env } as Record<string, string> : undefined,
+          stderr: 'pipe'
+        });
 
-      // Handle stdout (JSON-RPC responses)
-      proc.stdout?.on('data', (data: Buffer) => {
-        this.handleData(config.id, data);
-      });
-
-      // Handle stderr (logging)
-      proc.stderr?.on('data', (data: Buffer) => {
-        const stderr = data.toString().trim();
-        if (stderr) {
-          console.log(`[MCP ${config.name}] stderr:`, stderr);
+        // Log stderr if available
+        if (transport.stderr) {
+          transport.stderr.on('data', (data: Buffer) => {
+            const stderr = data.toString().trim();
+            if (stderr) {
+              console.log(`[MCP ${config.name}] stderr:`, stderr);
+            }
+          });
         }
-      });
-
-      // Handle process exit - reject all pending requests
-      proc.on('exit', (code) => {
-        console.log(`[MCP ${config.name}] Process exited with code ${code}`);
-        connection.isConnected = false;
-        exitError = new Error(`Process exited with code ${code}`);
-
-        // Reject all pending requests immediately
-        for (const [, pending] of connection.pendingRequests) {
-          pending.reject(exitError);
-        }
-        connection.pendingRequests.clear();
-
-        this.emit('disconnected', config.id);
-      });
-
-      proc.on('error', (error) => {
-        console.error(`[MCP ${config.name}] Process error:`, error);
-        connection.isConnected = false;
-        exitError = error;
-
-        // Reject all pending requests immediately
-        for (const [, pending] of connection.pendingRequests) {
-          pending.reject(error);
-        }
-        connection.pendingRequests.clear();
-
-        this.emit('error', config.id, error);
-      });
-
-      this.connections.set(config.id, connection);
-
-      // Small delay to check if process exits immediately
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (exitError) {
-        throw exitError;
       }
 
-      // Initialize connection with MCP protocol
-      await this.initialize(config.id);
+      // Create MCP client
+      const client = new Client(
+        { name: 'open-claude', version: '1.0.0' },
+        { capabilities: { roots: { listChanged: true } } }
+      );
+
+      // Handle transport errors
+      transport.onerror = (error) => {
+        console.error(`[MCP ${config.name}] Transport error:`, error);
+        this.emit('error', config.id, error);
+      };
+
+      transport.onclose = () => {
+        console.log(`[MCP ${config.name}] Transport closed`);
+        const conn = this.connections.get(config.id);
+        if (conn) {
+          conn.isConnected = false;
+        }
+        this.emit('disconnected', config.id);
+      };
+
+      // Connect to server
+      await client.connect(transport);
 
       // Get available tools
-      const tools = await this.listTools(config.id);
-      connection.tools = tools;
-      connection.isConnected = true;
+      const toolsResult = await client.listTools();
+      const tools: MCPTool[] = toolsResult.tools.map(t => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema
+      }));
+
+      const connection: MCPConnection = {
+        config,
+        client,
+        transport,
+        tools,
+        isConnected: true
+      };
+
+      this.connections.set(config.id, connection);
 
       console.log(`[MCP ${config.name}] Connected with ${tools.length} tools`);
       this.emit('connected', config.id, tools);
@@ -177,113 +136,17 @@ class MCPClient extends EventEmitter {
     }
   }
 
-  private handleData(serverId: string, data: Buffer) {
+  async callTool(serverId: string, toolName: string, args: Record<string, unknown>): Promise<unknown> {
     const connection = this.connections.get(serverId);
-    if (!connection) return;
-
-    connection.buffer += data.toString();
-
-    // Process complete JSON-RPC messages (delimited by newlines)
-    const lines = connection.buffer.split('\n');
-    connection.buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-
-      try {
-        const message = JSON.parse(line) as JSONRPCResponse;
-        this.handleResponse(serverId, message);
-      } catch (e) {
-        console.error(`[MCP ${connection.config.name}] Failed to parse response:`, e, line);
-      }
-    }
-  }
-
-  private handleResponse(serverId: string, response: JSONRPCResponse) {
-    const connection = this.connections.get(serverId);
-    if (!connection) return;
-
-    const pending = connection.pendingRequests.get(response.id);
-    if (pending) {
-      connection.pendingRequests.delete(response.id);
-
-      if (response.error) {
-        pending.reject(new Error(response.error.message));
-      } else {
-        pending.resolve(response.result);
-      }
-    }
-  }
-
-  private async sendRequest(serverId: string, method: string, params?: unknown): Promise<unknown> {
-    const connection = this.connections.get(serverId);
-    if (!connection || !connection.process?.stdin) {
+    if (!connection || !connection.isConnected) {
       throw new Error(`Server ${serverId} is not connected`);
     }
 
-    const id = ++connection.requestId;
-    const request: JSONRPCRequest = {
-      jsonrpc: '2.0',
-      id,
-      method,
-      params
-    };
-
-    return new Promise((resolve, reject) => {
-      connection.pendingRequests.set(id, { resolve, reject });
-
-      const timeoutId = setTimeout(() => {
-        connection.pendingRequests.delete(id);
-        reject(new Error(`Request ${method} timed out`));
-      }, 30000);
-
-      connection.pendingRequests.set(id, {
-        resolve: (value) => {
-          clearTimeout(timeoutId);
-          resolve(value);
-        },
-        reject: (error) => {
-          clearTimeout(timeoutId);
-          reject(error);
-        }
-      });
-
-      const message = JSON.stringify(request) + '\n';
-      connection.process?.stdin?.write(message);
-    });
-  }
-
-  private async initialize(serverId: string): Promise<void> {
-    const connection = this.connections.get(serverId);
-    if (!connection) throw new Error(`Server ${serverId} not found`);
-
-    const result = await this.sendRequest(serverId, 'initialize', {
-      protocolVersion: '2024-11-05',
-      capabilities: {
-        roots: { listChanged: false }
-      },
-      clientInfo: {
-        name: 'open-claude',
-        version: '1.0.0'
-      }
-    }) as { serverInfo?: MCPServerInfo };
-
-    connection.serverInfo = result?.serverInfo || null;
-
-    // Send initialized notification
-    await this.sendRequest(serverId, 'notifications/initialized', {});
-  }
-
-  private async listTools(serverId: string): Promise<MCPTool[]> {
-    const result = await this.sendRequest(serverId, 'tools/list', {}) as { tools?: MCPTool[] };
-    return result?.tools || [];
-  }
-
-  async callTool(serverId: string, toolName: string, args: Record<string, unknown>): Promise<unknown> {
-    const result = await this.sendRequest(serverId, 'tools/call', {
+    const result = await connection.client.callTool({
       name: toolName,
       arguments: args
     });
+
     return result;
   }
 
@@ -291,13 +154,13 @@ class MCPClient extends EventEmitter {
     const connection = this.connections.get(serverId);
     if (!connection) return;
 
-    if (connection.process) {
-      connection.process.kill();
-      connection.process = null;
+    try {
+      await connection.transport.close();
+    } catch (e) {
+      console.error(`[MCP ${connection.config.name}] Error closing transport:`, e);
     }
 
     connection.isConnected = false;
-    connection.tools = [];
     this.connections.delete(serverId);
 
     console.log(`[MCP] Disconnected from server: ${connection.config.name}`);
