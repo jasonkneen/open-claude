@@ -23,6 +23,8 @@ let currentStepsContainer: HTMLElement | null = null;
 let currentResponseEl: HTMLElement | null = null;
 let stepIndex = 0;
 let steps: StepData[] = [];
+let currentThinkingStep: HTMLElement | null = null;
+let currentToolStep: HTMLElement | null = null;
 
 // Constants
 const chevronSvg = `<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M14.128 7.16482C14.3126 6.95983 14.6298 6.94336 14.835 7.12771C15.0402 7.31242 15.0567 7.62952 14.8721 7.83477L10.372 12.835L10.2939 12.9053C10.2093 12.9667 10.1063 13 9.99995 13C9.85833 12.9999 9.72264 12.9402 9.62788 12.835L5.12778 7.83477L5.0682 7.75273C4.95072 7.55225 4.98544 7.28926 5.16489 7.12771C5.34445 6.96617 5.60969 6.95939 5.79674 7.09744L5.87193 7.16482L9.99995 11.7519L14.128 7.16482Z"/></svg>`;
@@ -137,83 +139,14 @@ async function sendMessage() {
   // Reset step tracking
   stepIndex = 0;
   steps = [];
-  let currentThinkingStep: HTMLElement | null = null;
-  let currentToolStep: HTMLElement | null = null;
+  currentThinkingStep = null;
+  currentToolStep = null;
 
   updateWindowSize();
 
   // Clear input
   input.value = '';
   sendBtn.classList.remove('visible');
-
-  // Set up stream listener
-  claude.onSpotlightStream((data: any) => {
-    if (currentResponseEl) {
-      currentResponseEl.innerHTML = parseMarkdown(data.fullText);
-      updateWindowSize();
-    }
-  });
-
-  claude.onSpotlightComplete((data: any) => {
-    if (currentResponseEl) {
-      currentResponseEl.innerHTML = parseMarkdown(data.fullText);
-    }
-    isLoading = false;
-    sendBtn.disabled = false;
-    updateWindowSize();
-  });
-
-  // Thinking listeners
-  claude.onSpotlightThinking((data: any) => {
-    if (data.isThinking) {
-      currentThinkingStep = createStepItem('thinking', 'Thinking...', true);
-      currentStepsContainer?.appendChild(currentThinkingStep);
-      steps.push({ type: 'thinking', el: currentThinkingStep });
-      updateWindowSize();
-    } else if (currentThinkingStep) {
-      const summary = data.thinkingText ? data.thinkingText.substring(0, 50) + '...' : 'Thought';
-      markStepComplete(currentThinkingStep, summary);
-      if (data.thinkingText) {
-        updateStepContent(currentThinkingStep, data.thinkingText);
-      }
-      currentThinkingStep = null;
-      updateWindowSize();
-    }
-  });
-
-  claude.onSpotlightThinkingStream((data: any) => {
-    if (currentThinkingStep) {
-      updateStepContent(currentThinkingStep, data.thinking);
-      updateWindowSize();
-    }
-  });
-
-  // Tool listeners
-  claude.onSpotlightTool((data: any) => {
-    if (data.isRunning) {
-      const label = data.message || toolLabels[data.toolName] || `Using ${data.toolName}`;
-      currentToolStep = createStepItem('tool', label, true);
-      currentStepsContainer?.appendChild(currentToolStep);
-      steps.push({ type: 'tool', el: currentToolStep, name: data.toolName });
-      updateWindowSize();
-    }
-  });
-
-  claude.onSpotlightToolResult((data: any) => {
-    if (currentToolStep) {
-      const label = toolLabels[data.toolName] || `Used ${data.toolName}`;
-      markStepComplete(currentToolStep, label);
-      if (data.result) {
-        const resultText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2);
-        updateStepContent(currentToolStep, resultText.substring(0, 500));
-      }
-      if (data.isError) {
-        currentToolStep.classList.add('error');
-      }
-      currentToolStep = null;
-      updateWindowSize();
-    }
-  });
 
   try {
     await claude.spotlightSend(message);
@@ -225,6 +158,75 @@ async function sendMessage() {
     sendBtn.disabled = false;
   }
 }
+
+// Set up stream listeners once at module level
+claude.onSpotlightStream((data: any) => {
+  if (currentResponseEl) {
+    currentResponseEl.innerHTML = parseMarkdown(data.fullText);
+    updateWindowSize();
+  }
+});
+
+claude.onSpotlightComplete((data: any) => {
+  if (currentResponseEl) {
+    currentResponseEl.innerHTML = parseMarkdown(data.fullText);
+  }
+  isLoading = false;
+  sendBtn.disabled = false;
+  updateWindowSize();
+});
+
+// Thinking listeners
+claude.onSpotlightThinking((data: any) => {
+  if (data.isThinking) {
+    currentThinkingStep = createStepItem('thinking', 'Thinking...', true);
+    currentStepsContainer?.appendChild(currentThinkingStep);
+    steps.push({ type: 'thinking', el: currentThinkingStep });
+    updateWindowSize();
+  } else if (currentThinkingStep) {
+    const summary = data.thinkingText ? data.thinkingText.substring(0, 50) + '...' : 'Thought';
+    markStepComplete(currentThinkingStep, summary);
+    if (data.thinkingText) {
+      updateStepContent(currentThinkingStep, data.thinkingText);
+    }
+    currentThinkingStep = null;
+    updateWindowSize();
+  }
+});
+
+claude.onSpotlightThinkingStream((data: any) => {
+  if (currentThinkingStep) {
+    updateStepContent(currentThinkingStep, data.thinking);
+    updateWindowSize();
+  }
+});
+
+// Tool listeners
+claude.onSpotlightTool((data: any) => {
+  if (data.isRunning) {
+    const label = data.message || toolLabels[data.toolName] || `Using ${data.toolName}`;
+    currentToolStep = createStepItem('tool', label, true);
+    currentStepsContainer?.appendChild(currentToolStep);
+    steps.push({ type: 'tool', el: currentToolStep, name: data.toolName });
+    updateWindowSize();
+  }
+});
+
+claude.onSpotlightToolResult((data: any) => {
+  if (currentToolStep) {
+    const label = toolLabels[data.toolName] || `Used ${data.toolName}`;
+    markStepComplete(currentToolStep, label);
+    if (data.result) {
+      const resultText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2);
+      updateStepContent(currentToolStep, resultText.substring(0, 500));
+    }
+    if (data.isError) {
+      currentToolStep.classList.add('error');
+    }
+    currentToolStep = null;
+    updateWindowSize();
+  }
+});
 
 // Event listeners
 input.addEventListener('input', () => {
