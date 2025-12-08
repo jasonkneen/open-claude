@@ -23,16 +23,67 @@ const DEFAULT_SETTINGS: SettingsSchema = {
   mcpServers: [],
 };
 
+// Sanitize a single arg by stripping surrounding quotes
+function sanitizeArg(arg: string): string {
+  if (typeof arg !== 'string') return '';
+  // Strip surrounding single or double quotes
+  if ((arg.startsWith('"') && arg.endsWith('"')) ||
+      (arg.startsWith("'") && arg.endsWith("'"))) {
+    return arg.slice(1, -1);
+  }
+  return arg;
+}
+
+// Sanitize and validate MCP server configs
+function sanitizeMCPServers(servers: MCPServerConfig[]): MCPServerConfig[] {
+  if (!Array.isArray(servers)) return [];
+
+  return servers.filter(server => {
+    // Must have required fields
+    if (!server || typeof server !== 'object') return false;
+    if (!server.id || typeof server.id !== 'string') return false;
+    if (!server.name || typeof server.name !== 'string') return false;
+    if (!server.command || typeof server.command !== 'string') return false;
+    return true;
+  }).map(server => ({
+    ...server,
+    // Sanitize command (strip quotes)
+    command: sanitizeArg(server.command),
+    // Sanitize args array
+    args: Array.isArray(server.args)
+      ? server.args.map(sanitizeArg).filter(a => a.length > 0)
+      : [],
+    // Ensure enabled is boolean
+    enabled: server.enabled === true,
+    // Ensure env is object or empty
+    env: (server.env && typeof server.env === 'object') ? server.env : {}
+  }));
+}
+
 // Get settings with defaults
 function getSettings(): SettingsSchema {
   const stored = store.get('settings');
-  return { ...DEFAULT_SETTINGS, ...stored };
+  const settings = { ...DEFAULT_SETTINGS, ...stored };
+
+  // Sanitize MCP servers on load
+  if (settings.mcpServers) {
+    settings.mcpServers = sanitizeMCPServers(settings.mcpServers);
+  }
+
+  return settings;
 }
 
 // Save settings
 function saveSettings(settings: Partial<SettingsSchema>) {
   const current = getSettings();
-  store.set('settings', { ...current, ...settings });
+  const merged = { ...current, ...settings };
+
+  // Sanitize MCP servers before saving
+  if (merged.mcpServers) {
+    merged.mcpServers = sanitizeMCPServers(merged.mcpServers);
+  }
+
+  store.set('settings', merged);
 }
 
 // Connect to all enabled MCP servers
