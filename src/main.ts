@@ -1,6 +1,64 @@
-import { app, BrowserWindow, ipcMain, session, globalShortcut, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, session, globalShortcut, screen, systemPreferences, desktopCapturer, shell } from 'electron';
 import path from 'path';
 import crypto from 'crypto';
+
+// Permission types
+type MediaAccessStatus = 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown';
+
+interface PermissionStatus {
+  camera: MediaAccessStatus;
+  microphone: MediaAccessStatus;
+  screen: MediaAccessStatus;
+  accessibility: boolean;
+}
+
+// Check all permissions
+function getPermissionStatus(): PermissionStatus {
+  if (process.platform !== 'darwin') {
+    return {
+      camera: 'granted',
+      microphone: 'granted',
+      screen: 'granted',
+      accessibility: true
+    };
+  }
+
+  return {
+    camera: systemPreferences.getMediaAccessStatus('camera'),
+    microphone: systemPreferences.getMediaAccessStatus('microphone'),
+    screen: systemPreferences.getMediaAccessStatus('screen'),
+    accessibility: systemPreferences.isTrustedAccessibilityClient(false)
+  };
+}
+
+// Request media access (camera/microphone)
+async function requestMediaAccess(mediaType: 'camera' | 'microphone'): Promise<boolean> {
+  if (process.platform !== 'darwin') return true;
+
+  const status = systemPreferences.getMediaAccessStatus(mediaType);
+  if (status === 'granted') return true;
+  if (status === 'denied' || status === 'restricted') {
+    // Open System Preferences
+    shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_' +
+      (mediaType === 'camera' ? 'Camera' : 'Microphone'));
+    return false;
+  }
+
+  return await systemPreferences.askForMediaAccess(mediaType);
+}
+
+// Open System Preferences for permissions that can't be requested programmatically
+function openPermissionSettings(permission: 'screen' | 'accessibility' | 'files'): void {
+  if (process.platform !== 'darwin') return;
+
+  const urls: Record<string, string> = {
+    screen: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+    accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+    files: 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
+  };
+
+  shell.openExternal(urls[permission]);
+}
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL, prepareAttachmentPayload } from './api/client';
 import { createStreamState, processSSEChunk, type StreamCallbacks } from './streaming/parser';
 import type { SettingsSchema, AttachmentPayload, UploadFilePayload, MCPServerConfig } from './types';
@@ -796,6 +854,42 @@ ipcMain.handle('execute-mcp-tool', async (_event, toolName: string, args: Record
   }
 
   return await mcpClient.callTool(connection.config.id, actualToolName, args);
+});
+
+// Permission management
+ipcMain.handle('get-permission-status', async () => {
+  return getPermissionStatus();
+});
+
+ipcMain.handle('request-media-access', async (_event, mediaType: 'camera' | 'microphone') => {
+  return await requestMediaAccess(mediaType);
+});
+
+ipcMain.handle('open-permission-settings', async (_event, permission: 'screen' | 'accessibility' | 'files') => {
+  openPermissionSettings(permission);
+  return { success: true };
+});
+
+// Request screen capture access (via desktopCapturer)
+ipcMain.handle('request-screen-capture', async () => {
+  if (process.platform !== 'darwin') return { granted: true, sources: [] };
+
+  try {
+    // Attempting to get sources will prompt for permission on macOS
+    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
+    return {
+      granted: sources.length > 0,
+      sources: sources.map(s => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }))
+    };
+  } catch (error) {
+    console.error('[Permissions] Screen capture error:', error);
+    return { granted: false, sources: [], error: String(error) };
+  }
+});
+
+// Check if running on macOS
+ipcMain.handle('get-platform', async () => {
+  return process.platform;
 });
 
 // Handle deep link on Windows (single instance)

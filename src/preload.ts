@@ -138,4 +138,13 @@ contextBridge.exposeInMainWorld('claude', {
   onReceiveTab: (callback: (data: { conversationId: string | null; title: string }) => void) => {
     ipcRenderer.on('receive-tab', (_event, data) => callback(data));
   },
+
+  // Permissions (macOS)
+  getPermissionStatus: () => ipcRenderer.invoke('get-permission-status'),
+  requestMediaAccess: (mediaType: 'camera' | 'microphone') =>
+    ipcRenderer.invoke('request-media-access', mediaType),
+  openPermissionSettings: (permission: 'screen' | 'accessibility' | 'files') =>
+    ipcRenderer.invoke('open-permission-settings', permission),
+  requestScreenCapture: () => ipcRenderer.invoke('request-screen-capture'),
+  getPlatform: () => ipcRenderer.invoke('get-platform'),
 });
