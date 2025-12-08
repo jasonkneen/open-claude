@@ -13,6 +13,8 @@ let settingsWindow: BrowserWindow | null = null;
 const DEFAULT_SETTINGS: SettingsSchema = {
   spotlightKeybind: 'CommandOrControl+Shift+C',
   spotlightPersistHistory: true,
+  sidebarWidth: 260,
+  sidebarCollapsed: false,
 };
 
 // Get settings with defaults

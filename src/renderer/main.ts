@@ -18,8 +18,8 @@ declare global {
       generateTitle: (convId: string, messageContent: string) => Promise<void>;
       uploadAttachments: (files: Array<{ name: string; size: number; type: string; data: ArrayBuffer | Uint8Array | number[] }>) => Promise<UploadedAttachmentPayload[]>;
       openSettings: () => Promise<void>;
-      getSettings: () => Promise<{ spotlightKeybind?: string; spotlightPersistHistory?: boolean }>;
-      saveSettings: (settings: { spotlightKeybind?: string; spotlightPersistHistory?: boolean }) => Promise<{ spotlightKeybind?: string; spotlightPersistHistory?: boolean }>;
+      getSettings: () => Promise<{ spotlightKeybind?: string; spotlightPersistHistory?: boolean; sidebarWidth?: number; sidebarCollapsed?: boolean }>;
+      saveSettings: (settings: { spotlightKeybind?: string; spotlightPersistHistory?: boolean; sidebarWidth?: number; sidebarCollapsed?: boolean }) => Promise<{ spotlightKeybind?: string; spotlightPersistHistory?: boolean; sidebarWidth?: number; sidebarCollapsed?: boolean }>;
       onMessageThinking: (callback: (data: ThinkingData) => void) => void;
       onMessageThinkingStream: (callback: (data: ThinkingStreamData) => void) => void;
       onMessageToolUse: (callback: (data: ToolUseData) => void) => void;
@@ -171,6 +171,9 @@ let openDropdownId: string | null = null;
 let pendingAttachments: UploadedAttachment[] = [];
 let uploadingAttachments = false;
 let attachmentError = '';
+let sidebarWidth = 260;
+let sidebarCollapsed = false;
+let isResizingSidebar = false;
 
 const modelDisplayNames: Record<string, string> = {
   'claude-opus-4-5-20251101': 'Opus 4.5',
@@ -377,6 +380,14 @@ function showChat() {
 }
 
 // Sidebar functions
+function updateSidebarWidth(width: number) {
+  const sidebar = $('sidebar');
+  if (sidebar) {
+    sidebar.style.width = `${width}px`;
+  }
+  sidebarWidth = width;
+}
+
 function toggleSidebar() {
   const sidebar = $('sidebar');
   const overlay = $('sidebar-overlay');
@@ -390,6 +401,7 @@ function toggleSidebar() {
 
   if (isOpening) {
     sidebarTab.classList.add('hidden');
+    updateSidebarWidth(sidebarWidth);
     loadConversationsList();
   } else {
     sidebarTab.classList.remove('hidden');
@@ -404,6 +416,78 @@ function closeSidebar() {
   if (sidebar) sidebar.classList.remove('open');
   if (overlay) overlay.classList.remove('open');
   if (sidebarTab) sidebarTab.classList.remove('hidden');
+}
+
+function collapseSidebar() {
+  sidebarCollapsed = true;
+  const sidebar = $('sidebar');
+  if (sidebar) {
+    sidebar.classList.add('collapsed');
+    sidebar.style.width = '60px';
+  }
+  saveSidebarSettings();
+}
+
+function expandSidebar() {
+  sidebarCollapsed = false;
+  const sidebar = $('sidebar');
+  if (sidebar) {
+    sidebar.classList.remove('collapsed');
+    sidebar.style.width = `${sidebarWidth}px`;
+  }
+  saveSidebarSettings();
+}
+
+function toggleSidebarCollapse() {
+  if (sidebarCollapsed) {
+    expandSidebar();
+  } else {
+    collapseSidebar();
+  }
+}
+
+function startSidebarResize(e: MouseEvent) {
+  if (sidebarCollapsed) return;
+  isResizingSidebar = true;
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  e.preventDefault();
+}
+
+function handleSidebarResize(e: MouseEvent) {
+  if (!isResizingSidebar) return;
+  const newWidth = Math.max(200, Math.min(400, e.clientX));
+  updateSidebarWidth(newWidth);
+}
+
+function stopSidebarResize() {
+  if (!isResizingSidebar) return;
+  isResizingSidebar = false;
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  saveSidebarSettings();
+}
+
+async function saveSidebarSettings() {
+  try {
+    await window.claude.saveSettings({ sidebarWidth, sidebarCollapsed });
+  } catch (e) {
+    console.error('Failed to save sidebar settings:', e);
+  }
+}
+
+async function loadSidebarSettings() {
+  try {
+    const settings = await window.claude.getSettings();
+    if (settings.sidebarWidth) {
+      sidebarWidth = settings.sidebarWidth;
+    }
+    if (settings.sidebarCollapsed !== undefined) {
+      sidebarCollapsed = settings.sidebarCollapsed;
+    }
+  } catch (e) {
+    console.error('Failed to load sidebar settings:', e);
+  }
 }
 
 // Model selection
@@ -1482,6 +1566,9 @@ async function stopGenerating() {
 
 // Initialize
 async function init() {
+  // Load sidebar settings first
+  await loadSidebarSettings();
+
   if (await window.claude.getAuthStatus()) {
     showHome();
     loadConversationsList();
@@ -1679,6 +1766,15 @@ function setupEventListeners() {
   sidebarTab?.addEventListener('mouseleave', () => {
     clearTimeout(hoverTimeout);
   });
+
+  // Sidebar resize handle
+  const sidebarResizeHandle = $('sidebar-resize-handle');
+  sidebarResizeHandle?.addEventListener('mousedown', startSidebarResize);
+  document.addEventListener('mousemove', handleSidebarResize);
+  document.addEventListener('mouseup', stopSidebarResize);
+
+  // Sidebar collapse toggle
+  $('sidebar-collapse-btn')?.addEventListener('click', toggleSidebarCollapse);
 }
 
 // Start the app

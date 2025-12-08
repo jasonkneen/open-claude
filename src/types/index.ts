@@ -2,6 +2,8 @@
 export interface SettingsSchema {
   spotlightKeybind: string;
   spotlightPersistHistory: boolean;
+  sidebarWidth: number;
+  sidebarCollapsed: boolean;
 }
 
 // Store schema for electron-store
