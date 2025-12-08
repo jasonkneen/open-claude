@@ -1,7 +1,18 @@
+// MCP Server configuration
+export interface MCPServerConfig {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  enabled: boolean;
+}
+
 // Settings schema
 export interface SettingsSchema {
   spotlightKeybind: string;
   spotlightPersistHistory: boolean;
+  mcpServers: MCPServerConfig[];
 }
 
 // Store schema for electron-store

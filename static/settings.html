@@ -40,6 +40,24 @@
         </div>
       </div>
 
+      <!-- MCP Servers Section -->
+      <div class="settings-section">
+        <h2>MCP Servers</h2>
+        <p class="section-description">Configure Model Context Protocol servers to extend Claude's capabilities with external tools and data sources.</p>
+
+        <div id="mcp-servers-list" class="mcp-servers-list">
+          <!-- Server items will be rendered here -->
+        </div>
+
+        <button class="add-server-btn" id="add-mcp-server-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Add MCP Server
+        </button>
+      </div>
+
       <!-- About Section -->
       <div class="settings-section">
         <h2>About</h2>
@@ -49,6 +67,34 @@
             <span class="about-value" id="app-version">1.0.0</span>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add MCP Server Modal -->
+  <div class="modal-overlay" id="add-server-modal" style="display: none;">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Add MCP Server</h3>
+        <button class="modal-close" id="close-modal-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="server-name">Name</label>
+          <input type="text" id="server-name" placeholder="My MCP Server">
+        </div>
+        <div class="form-group">
+          <label for="server-command">Command</label>
+          <input type="text" id="server-command" placeholder="npx">
+        </div>
+        <div class="form-group">
+          <label for="server-args">Arguments (comma-separated)</label>
+          <input type="text" id="server-args" placeholder="-y, @modelcontextprotocol/server-filesystem">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancel-modal-btn">Cancel</button>
+        <button class="btn-primary" id="save-server-btn">Save</button>
       </div>
     </div>
   </div>

@@ -116,4 +116,13 @@ contextBridge.exposeInMainWorld('claude', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings: { spotlightKeybind?: string; spotlightPersistHistory?: boolean }) =>
     ipcRenderer.invoke('save-settings', settings),
+
+  // MCP Server management
+  getMCPServers: () => ipcRenderer.invoke('get-mcp-servers'),
+  addMCPServer: (server: { name: string; command: string; args: string[]; env?: Record<string, string>; enabled: boolean }) =>
+    ipcRenderer.invoke('add-mcp-server', server),
+  updateMCPServer: (serverId: string, updates: { name?: string; command?: string; args?: string[]; env?: Record<string, string>; enabled?: boolean }) =>
+    ipcRenderer.invoke('update-mcp-server', serverId, updates),
+  removeMCPServer: (serverId: string) => ipcRenderer.invoke('remove-mcp-server', serverId),
+  toggleMCPServer: (serverId: string) => ipcRenderer.invoke('toggle-mcp-server', serverId),
 });

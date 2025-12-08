@@ -3,7 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { isAuthenticated, getOrgId, makeRequest, streamCompletion, stopResponse, generateTitle, store, BASE_URL, prepareAttachmentPayload } from './api/client';
 import { createStreamState, processSSEChunk, type StreamCallbacks } from './streaming/parser';
-import type { SettingsSchema, AttachmentPayload, UploadFilePayload } from './types';
+import type { SettingsSchema, AttachmentPayload, UploadFilePayload, MCPServerConfig } from './types';
 
 let mainWindow: BrowserWindow | null = null;
 let spotlightWindow: BrowserWindow | null = null;
@@ -13,6 +13,7 @@ let settingsWindow: BrowserWindow | null = null;
 const DEFAULT_SETTINGS: SettingsSchema = {
   spotlightKeybind: 'CommandOrControl+Shift+C',
   spotlightPersistHistory: true,
+  mcpServers: [],
 };
 
 // Get settings with defaults
@@ -566,6 +567,44 @@ ipcMain.handle('save-settings', async (_event, settings: Partial<SettingsSchema>
     registerSpotlightShortcut();
   }
   return getSettings();
+});
+
+// MCP Server management
+ipcMain.handle('get-mcp-servers', async () => {
+  const settings = getSettings();
+  return settings.mcpServers || [];
+});
+
+ipcMain.handle('add-mcp-server', async (_event, server: MCPServerConfig) => {
+  const settings = getSettings();
+  const mcpServers = [...(settings.mcpServers || []), { ...server, id: crypto.randomUUID() }];
+  saveSettings({ mcpServers });
+  return getSettings().mcpServers;
+});
+
+ipcMain.handle('update-mcp-server', async (_event, serverId: string, updates: Partial<MCPServerConfig>) => {
+  const settings = getSettings();
+  const mcpServers = (settings.mcpServers || []).map(s =>
+    s.id === serverId ? { ...s, ...updates } : s
+  );
+  saveSettings({ mcpServers });
+  return getSettings().mcpServers;
+});
+
+ipcMain.handle('remove-mcp-server', async (_event, serverId: string) => {
+  const settings = getSettings();
+  const mcpServers = (settings.mcpServers || []).filter(s => s.id !== serverId);
+  saveSettings({ mcpServers });
+  return getSettings().mcpServers;
+});
+
+ipcMain.handle('toggle-mcp-server', async (_event, serverId: string) => {
+  const settings = getSettings();
+  const mcpServers = (settings.mcpServers || []).map(s =>
+    s.id === serverId ? { ...s, enabled: !s.enabled } : s
+  );
+  saveSettings({ mcpServers });
+  return getSettings().mcpServers;
 });
 
 // Handle deep link on Windows (single instance)
