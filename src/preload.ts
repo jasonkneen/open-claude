@@ -11,8 +11,8 @@ contextBridge.exposeInMainWorld('claude', {
   renameConversation: (convId: string, name: string) => ipcRenderer.invoke('rename-conversation', convId, name),
   starConversation: (convId: string, isStarred: boolean) => ipcRenderer.invoke('star-conversation', convId, isStarred),
   generateTitle: (convId: string, messageContent: string, recentTitles?: string[]) => ipcRenderer.invoke('generate-title', convId, messageContent, recentTitles || []),
-  sendMessage: (conversationId: string, message: string, parentMessageUuid: string, attachments?: unknown[]) =>
-    ipcRenderer.invoke('send-message', conversationId, message, parentMessageUuid, attachments || []),
+  sendMessage: (conversationId: string, message: string, parentMessageUuid: string, attachments?: unknown[], mcpTools?: Array<{ serverId: string; toolName: string }>) =>
+    ipcRenderer.invoke('send-message', conversationId, message, parentMessageUuid, attachments || [], mcpTools || []),
   uploadAttachments: (files: Array<{ name: string; size: number; type: string; data: ArrayBuffer | Uint8Array | number[] }>) =>
     ipcRenderer.invoke('upload-attachments', files),
   stopResponse: (conversationId: string) => ipcRenderer.invoke('stop-response', conversationId),
@@ -126,6 +126,7 @@ contextBridge.exposeInMainWorld('claude', {
   removeMCPServer: (serverId: string) => ipcRenderer.invoke('remove-mcp-server', serverId),
   toggleMCPServer: (serverId: string) => ipcRenderer.invoke('toggle-mcp-server', serverId),
   getMCPTools: () => ipcRenderer.invoke('get-mcp-tools'),
+  getMCPServerStatus: () => ipcRenderer.invoke('get-mcp-server-status'),
   executeMCPTool: (toolName: string, args: Record<string, unknown>) =>
     ipcRenderer.invoke('execute-mcp-tool', toolName, args),
 

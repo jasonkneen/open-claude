@@ -202,7 +202,22 @@ interface MCPServer {
   enabled: boolean;
 }
 
+interface MCPTool {
+  name: string;
+  description?: string;
+}
+
+interface MCPServerStatus {
+  id: string;
+  name: string;
+  enabled: boolean;
+  isConnected: boolean;
+  tools: MCPTool[];
+  error: string | null;
+}
+
 let mcpServers: MCPServer[] = [];
+let mcpServerStatus: MCPServerStatus[] = [];
 let editingServerId: string | null = null;
 
 const serversList = document.getElementById('mcp-servers-list') as HTMLElement;
@@ -218,6 +233,7 @@ const serverArgsInput = document.getElementById('server-args') as HTMLInputEleme
 
 async function loadMCPServers() {
   mcpServers = await claude.getMCPServers() || [];
+  mcpServerStatus = await claude.getMCPServerStatus() || [];
   renderServersList();
 }
 
@@ -229,32 +245,61 @@ function renderServersList() {
     return;
   }
 
-  serversList.innerHTML = mcpServers.map(server => `
-    <div class="mcp-server-item" data-id="${server.id}">
-      <label class="toggle" style="margin-right: 4px;">
-        <input type="checkbox" ${server.enabled ? 'checked' : ''} data-action="toggle" data-id="${server.id}">
-        <span class="toggle-slider"></span>
-      </label>
-      <div class="mcp-server-info">
-        <div class="mcp-server-name">${escapeHtml(server.name)}</div>
-        <div class="mcp-server-command">${escapeHtml(server.command)} ${escapeHtml(server.args.join(' '))}</div>
+  serversList.innerHTML = mcpServers.map(server => {
+    const status = mcpServerStatus.find(s => s.id === server.id);
+    const isConnected = status?.isConnected || false;
+    const tools = status?.tools || [];
+    const toolCount = tools.length;
+
+    let statusBadge = '';
+    if (server.enabled) {
+      if (isConnected) {
+        statusBadge = `<span class="mcp-status connected">Connected</span>`;
+      } else {
+        statusBadge = `<span class="mcp-status disconnected">Disconnected</span>`;
+      }
+    } else {
+      statusBadge = `<span class="mcp-status disabled">Disabled</span>`;
+    }
+
+    const toolsList = tools.length > 0
+      ? `<div class="mcp-tools-list">${tools.map(t => `<span class="mcp-tool-badge" title="${escapeHtml(t.description || t.name)}">${escapeHtml(t.name)}</span>`).join('')}</div>`
+      : (server.enabled && isConnected ? '<div class="mcp-no-tools">No tools available</div>' : '');
+
+    return `
+      <div class="mcp-server-item ${isConnected ? 'connected' : ''}" data-id="${server.id}">
+        <div class="mcp-server-header">
+          <label class="toggle" style="margin-right: 8px;">
+            <input type="checkbox" ${server.enabled ? 'checked' : ''} data-action="toggle" data-id="${server.id}">
+            <span class="toggle-slider"></span>
+          </label>
+          <div class="mcp-server-info">
+            <div class="mcp-server-name-row">
+              <span class="mcp-server-name">${escapeHtml(server.name)}</span>
+              ${statusBadge}
+              ${toolCount > 0 ? `<span class="mcp-tool-count">${toolCount} tool${toolCount !== 1 ? 's' : ''}</span>` : ''}
+            </div>
+            <div class="mcp-server-command">${escapeHtml(server.command)} ${escapeHtml(server.args.join(' '))}</div>
+          </div>
+          <div class="mcp-server-actions">
+            <button class="mcp-server-btn" data-action="edit" data-id="${server.id}" title="Edit">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </button>
+            <button class="mcp-server-btn delete" data-action="delete" data-id="${server.id}" title="Delete">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        ${toolsList}
       </div>
-      <div class="mcp-server-actions">
-        <button class="mcp-server-btn" data-action="edit" data-id="${server.id}" title="Edit">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-          </svg>
-        </button>
-        <button class="mcp-server-btn delete" data-action="delete" data-id="${server.id}" title="Delete">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-          </svg>
-        </button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function escapeHtml(text: string): string {

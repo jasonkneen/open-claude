@@ -488,7 +488,12 @@ ipcMain.handle('upload-attachments', async (_event, files: UploadFilePayload[]) 
 });
 
 // Send a message and stream response
-ipcMain.handle('send-message', async (event, conversationId: string, message: string, parentMessageUuid: string, attachments: AttachmentPayload[] = []) => {
+interface MCPToolSelection {
+  serverId: string;
+  toolName: string;
+}
+
+ipcMain.handle('send-message', async (event, conversationId: string, message: string, parentMessageUuid: string, attachments: AttachmentPayload[] = [], mcpTools: MCPToolSelection[] = []) => {
   const orgId = await getOrgId();
   if (!orgId) throw new Error('Not authenticated');
 
@@ -498,6 +503,9 @@ ipcMain.handle('send-message', async (event, conversationId: string, message: st
   if (attachments?.length) {
     console.log('[API] Attachments:', attachments.map(a => `${a.file_name} (${a.file_size})`).join(', '));
     console.log('[API] File IDs:', attachments.map(a => a.document_id).join(', '));
+  }
+  if (mcpTools?.length) {
+    console.log('[API] Selected MCP tools:', mcpTools.map(t => `${t.serverId}:${t.toolName}`).join(', '));
   }
 
   const state = createStreamState();
@@ -690,6 +698,25 @@ ipcMain.handle('toggle-mcp-server', async (_event, serverId: string) => {
 // Get available MCP tools
 ipcMain.handle('get-mcp-tools', async () => {
   return getMCPToolsForAPI();
+});
+
+// Get MCP server status (connection status and tools)
+ipcMain.handle('get-mcp-server-status', async () => {
+  const settings = getSettings();
+  const servers = settings.mcpServers || [];
+  const connections = mcpClient.getAllConnections();
+
+  return servers.map(server => {
+    const connection = connections.find(c => c.config.id === server.id);
+    return {
+      id: server.id,
+      name: server.name,
+      enabled: server.enabled,
+      isConnected: connection?.isConnected || false,
+      tools: connection?.tools || [],
+      error: connection ? null : (server.enabled ? 'Not connected' : null)
+    };
+  });
 });
 
 // Execute MCP tool

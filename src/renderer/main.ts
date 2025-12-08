@@ -1,5 +1,14 @@
 import { parseMarkdown } from './markdown.js';
 
+// MCP Server Status interface (needed for window.claude type)
+interface MCPServerStatus {
+  id: string;
+  name: string;
+  enabled: boolean;
+  isConnected: boolean;
+  tools: Array<{ name: string; description?: string }>;
+  error: string | null;
+}
 
 declare global {
   interface Window {
@@ -13,7 +22,7 @@ declare global {
       deleteConversation: (convId: string) => Promise<void>;
       renameConversation: (convId: string, name: string) => Promise<void>;
       starConversation: (convId: string, isStarred: boolean) => Promise<void>;
-      sendMessage: (convId: string, message: string, parentUuid: string, attachments?: AttachmentPayload[]) => Promise<void>;
+      sendMessage: (convId: string, message: string, parentUuid: string, attachments?: AttachmentPayload[], mcpTools?: Array<{ serverId: string; toolName: string }>) => Promise<void>;
       stopResponse: (convId: string) => Promise<void>;
       generateTitle: (convId: string, messageContent: string) => Promise<void>;
       uploadAttachments: (files: Array<{ name: string; size: number; type: string; data: ArrayBuffer | Uint8Array | number[] }>) => Promise<UploadedAttachmentPayload[]>;
@@ -26,6 +35,10 @@ declare global {
       onMessageToolResult: (callback: (data: ToolResultData) => void) => void;
       onMessageStream: (callback: (data: StreamData) => void) => void;
       onMessageComplete: (callback: (data: CompleteData) => void) => void;
+      getMCPServerStatus: () => Promise<MCPServerStatus[]>;
+      newWindow: () => Promise<void>;
+      detachTab: (tabData: { conversationId: string | null; title: string }) => Promise<void>;
+      onReceiveTab: (callback: (data: { conversationId: string | null; title: string }) => void) => void;
     };
   }
 }
@@ -185,6 +198,12 @@ let openDropdownId: string | null = null;
 let pendingAttachments: UploadedAttachment[] = [];
 let uploadingAttachments = false;
 let attachmentError = '';
+
+// MCP Tools selection state
+let mcpServerStatus: MCPServerStatus[] = [];
+let selectedMCPTools: Set<string> = new Set(); // Set of "serverId:toolName"
+let selectedMCPServers: Set<string> = new Set(); // Set of serverIds (all tools enabled)
+let toolsPopupExpanded: Set<string> = new Set(); // Set of expanded serverIds
 
 const modelDisplayNames: Record<string, string> = {
   'claude-opus-4-5-20251101': 'Opus 4.5',
@@ -1001,7 +1020,7 @@ async function submitEditMessage(msgEl: HTMLElement, newText: string) {
   currentStreamingElement = addMessage('assistant', '<div class="loading-dots"><span></span><span></span><span></span></div>', true);
 
   try {
-    await window.claude.sendMessage(conversationId!, trimmedText, parentMessageUuid!);
+    await window.claude.sendMessage(conversationId!, trimmedText, parentMessageUuid!, [], getSelectedMCPTools());
   } catch (e: any) {
     if (currentStreamingElement) {
       const content = currentStreamingElement.querySelector('.message-content');
@@ -1618,7 +1637,7 @@ async function sendFromHome() {
       if (chatContainer) chatContainer.classList.remove('entering');
     }, 600);
 
-    await window.claude.sendMessage(conversationId, msg, parentMessageUuid!, attachmentPayloads);
+    await window.claude.sendMessage(conversationId, msg, parentMessageUuid!, attachmentPayloads, getSelectedMCPTools());
 
     clearAttachments();
 
@@ -1683,7 +1702,7 @@ async function sendMessage() {
   currentStreamingElement = addMessage('assistant', '<div class="loading-dots"><span></span><span></span><span></span></div>', true);
 
   try {
-    await window.claude.sendMessage(conversationId, msg, parentMessageUuid!, attachmentPayloads);
+    await window.claude.sendMessage(conversationId, msg, parentMessageUuid!, attachmentPayloads, getSelectedMCPTools());
     clearAttachments();
   } catch (e: any) {
     if (currentStreamingElement) {
@@ -1738,6 +1757,191 @@ async function stopGenerating() {
   if (inputEl) inputEl.focus();
 }
 
+// MCP Tools Popup Functions
+async function loadMCPServerStatus() {
+  try {
+    mcpServerStatus = await window.claude.getMCPServerStatus() || [];
+    updateToolsBadge();
+    renderToolsPopup();
+  } catch (e) {
+    console.error('Failed to load MCP server status:', e);
+    mcpServerStatus = [];
+  }
+}
+
+function updateToolsBadge() {
+  const badge = $('tools-badge');
+  if (!badge) return;
+
+  // Count total selected tools
+  let count = 0;
+
+  // Count tools from selected servers
+  for (const serverId of selectedMCPServers) {
+    const server = mcpServerStatus.find(s => s.id === serverId);
+    if (server && server.isConnected) {
+      count += server.tools.length;
+    }
+  }
+
+  // Add individually selected tools (not from selected servers)
+  for (const toolKey of selectedMCPTools) {
+    const [serverId] = toolKey.split(':');
+    if (!selectedMCPServers.has(serverId)) {
+      count++;
+    }
+  }
+
+  if (count > 0) {
+    badge.textContent = count.toString();
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function renderToolsPopup() {
+  const content = $('tools-popup-content');
+  if (!content) return;
+
+  const connectedServers = mcpServerStatus.filter(s => s.enabled && s.isConnected);
+
+  if (connectedServers.length === 0) {
+    content.innerHTML = '<p class="tools-empty">No MCP servers connected</p>';
+    return;
+  }
+
+  content.innerHTML = connectedServers.map(server => {
+    const isServerSelected = selectedMCPServers.has(server.id);
+    const isExpanded = toolsPopupExpanded.has(server.id);
+
+    const toolsHtml = server.tools.map(tool => {
+      const toolKey = `${server.id}:${tool.name}`;
+      const isToolSelected = isServerSelected || selectedMCPTools.has(toolKey);
+
+      return `
+        <label class="tools-popup-tool">
+          <input type="checkbox"
+                 class="tool-checkbox"
+                 data-server-id="${server.id}"
+                 data-tool-name="${tool.name}"
+                 ${isToolSelected ? 'checked' : ''}
+                 ${isServerSelected ? 'disabled' : ''}>
+          <span class="tool-name">${escapeHtml(tool.name)}</span>
+          ${tool.description ? `<span class="tool-desc">${escapeHtml(tool.description)}</span>` : ''}
+        </label>
+      `;
+    }).join('');
+
+    return `
+      <div class="tools-popup-server" data-server-id="${server.id}">
+        <div class="tools-popup-server-header">
+          <label class="tools-popup-server-check">
+            <input type="checkbox"
+                   class="server-checkbox"
+                   data-server-id="${server.id}"
+                   ${isServerSelected ? 'checked' : ''}>
+            <span class="server-name">${escapeHtml(server.name)}</span>
+            <span class="server-tool-count">${server.tools.length} tool${server.tools.length !== 1 ? 's' : ''}</span>
+          </label>
+          <button class="tools-popup-expand" data-server-id="${server.id}">
+            ${isExpanded ? '−' : '+'}
+          </button>
+        </div>
+        <div class="tools-popup-tools ${isExpanded ? 'expanded' : ''}">
+          ${toolsHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add event listeners
+  content.querySelectorAll('.server-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement;
+      const serverId = target.dataset.serverId;
+      if (!serverId) return;
+
+      if (target.checked) {
+        selectedMCPServers.add(serverId);
+        // Remove individual tool selections for this server
+        const server = mcpServerStatus.find(s => s.id === serverId);
+        if (server) {
+          server.tools.forEach(t => selectedMCPTools.delete(`${serverId}:${t.name}`));
+        }
+      } else {
+        selectedMCPServers.delete(serverId);
+      }
+      updateToolsBadge();
+      renderToolsPopup();
+    });
+  });
+
+  content.querySelectorAll('.tool-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement;
+      const serverId = target.dataset.serverId;
+      const toolName = target.dataset.toolName;
+      if (!serverId || !toolName) return;
+
+      const toolKey = `${serverId}:${toolName}`;
+      if (target.checked) {
+        selectedMCPTools.add(toolKey);
+      } else {
+        selectedMCPTools.delete(toolKey);
+      }
+      updateToolsBadge();
+    });
+  });
+
+  content.querySelectorAll('.tools-popup-expand').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const serverId = (btn as HTMLElement).dataset.serverId;
+      if (!serverId) return;
+
+      if (toolsPopupExpanded.has(serverId)) {
+        toolsPopupExpanded.delete(serverId);
+      } else {
+        toolsPopupExpanded.add(serverId);
+      }
+      renderToolsPopup();
+    });
+  });
+}
+
+function toggleToolsPopup() {
+  const popup = $('tools-popup');
+  const btn = $('tools-btn');
+  if (!popup) return;
+
+  const isVisible = popup.style.display !== 'none';
+  popup.style.display = isVisible ? 'none' : 'block';
+  btn?.classList.toggle('active', !isVisible);
+}
+
+function getSelectedMCPTools(): Array<{ serverId: string; toolName: string }> {
+  const tools: Array<{ serverId: string; toolName: string }> = [];
+
+  // Add all tools from selected servers
+  for (const serverId of selectedMCPServers) {
+    const server = mcpServerStatus.find(s => s.id === serverId);
+    if (server && server.isConnected) {
+      server.tools.forEach(t => tools.push({ serverId, toolName: t.name }));
+    }
+  }
+
+  // Add individually selected tools
+  for (const toolKey of selectedMCPTools) {
+    const [serverId, toolName] = toolKey.split(':');
+    if (!selectedMCPServers.has(serverId)) {
+      tools.push({ serverId, toolName });
+    }
+  }
+
+  return tools;
+}
+
 // Initialize
 async function init() {
   // Initialize tabs
@@ -1758,6 +1962,7 @@ async function init() {
   if (await window.claude.getAuthStatus()) {
     showHome();
     loadConversationsList();
+    loadMCPServerStatus();
   } else {
     showLogin();
   }
@@ -1926,6 +2131,28 @@ function setupEventListeners() {
 
   // Stop button
   $('stop-btn')?.addEventListener('click', stopGenerating);
+
+  // MCP Tools popup
+  $('tools-btn')?.addEventListener('click', toggleToolsPopup);
+  $('tools-popup-close')?.addEventListener('click', () => {
+    const popup = $('tools-popup');
+    const btn = $('tools-btn');
+    if (popup) popup.style.display = 'none';
+    btn?.classList.remove('active');
+  });
+
+  // Close tools popup when clicking outside
+  document.addEventListener('click', (e) => {
+    const popup = $('tools-popup');
+    const btn = $('tools-btn');
+    const target = e.target as HTMLElement;
+
+    if (popup && popup.style.display !== 'none' &&
+        !popup.contains(target) && !btn?.contains(target)) {
+      popup.style.display = 'none';
+      btn?.classList.remove('active');
+    }
+  });
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {

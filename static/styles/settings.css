@@ -245,12 +245,22 @@ body {
 
 .mcp-server-item {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   padding: 12px;
   background: rgba(0, 0, 0, 0.04);
   border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.mcp-server-item.connected {
+  border-color: rgba(52, 199, 89, 0.3);
+}
+
+.mcp-server-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .mcp-server-info {
@@ -258,11 +268,69 @@ body {
   min-width: 0;
 }
 
+.mcp-server-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .mcp-server-name {
   font-size: 14px;
   font-weight: 500;
   color: #1a1a1a;
-  margin-bottom: 2px;
+}
+
+.mcp-status {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mcp-status.connected {
+  background: rgba(52, 199, 89, 0.15);
+  color: #34C759;
+}
+
+.mcp-status.disconnected {
+  background: rgba(255, 59, 48, 0.15);
+  color: #FF3B30;
+}
+
+.mcp-status.disabled {
+  background: rgba(142, 142, 147, 0.15);
+  color: #8E8E93;
+}
+
+.mcp-tool-count {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.mcp-tools-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 52px;
+}
+
+.mcp-tool-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: rgba(204, 120, 92, 0.1);
+  color: #CC785C;
+  border-radius: 4px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+.mcp-no-tools {
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.4);
+  padding-left: 52px;
+  font-style: italic;
 }
 
 .mcp-server-command {
@@ -540,6 +608,10 @@ body {
     border-color: rgba(255, 255, 255, 0.1);
   }
 
+  .mcp-server-item.connected {
+    border-color: rgba(52, 199, 89, 0.4);
+  }
+
   .mcp-server-name {
     color: #f0f0f0;
   }
@@ -555,6 +627,31 @@ body {
   .mcp-server-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: rgba(255, 255, 255, 0.8);
+  }
+
+  .mcp-status.connected {
+    background: rgba(52, 199, 89, 0.2);
+  }
+
+  .mcp-status.disconnected {
+    background: rgba(255, 59, 48, 0.2);
+  }
+
+  .mcp-status.disabled {
+    background: rgba(142, 142, 147, 0.2);
+  }
+
+  .mcp-tool-count {
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .mcp-tool-badge {
+    background: rgba(204, 120, 92, 0.2);
+    color: #E8C4A0;
+  }
+
+  .mcp-no-tools {
+    color: rgba(255, 255, 255, 0.4);
   }
 
   .modal {
