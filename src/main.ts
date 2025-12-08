@@ -38,26 +38,32 @@ function sanitizeArg(arg: string): string {
 function sanitizeMCPServers(servers: MCPServerConfig[]): MCPServerConfig[] {
   if (!Array.isArray(servers)) return [];
 
-  return servers.filter(server => {
-    // Must have required fields
-    if (!server || typeof server !== 'object') return false;
-    if (!server.id || typeof server.id !== 'string') return false;
-    if (!server.name || typeof server.name !== 'string') return false;
-    if (!server.command || typeof server.command !== 'string') return false;
-    return true;
-  }).map(server => ({
-    ...server,
-    // Sanitize command (strip quotes)
-    command: sanitizeArg(server.command),
-    // Sanitize args array
-    args: Array.isArray(server.args)
-      ? server.args.map(sanitizeArg).filter(a => a.length > 0)
-      : [],
-    // Ensure enabled is boolean
-    enabled: server.enabled === true,
-    // Ensure env is object or empty
-    env: (server.env && typeof server.env === 'object') ? server.env : {}
-  }));
+  return servers
+    .filter(server => server && typeof server === 'object')
+    .map(server => {
+      // Ensure id exists (generate one if missing so it can be deleted)
+      const id = (server.id && typeof server.id === 'string') ? server.id : crypto.randomUUID();
+      // Keep name/command even if empty (so user can see and delete bad entries)
+      const name = typeof server.name === 'string' ? server.name : '';
+      const command = typeof server.command === 'string' ? sanitizeArg(server.command) : '';
+      // Invalid if missing name or command
+      const isValid = name.length > 0 && command.length > 0;
+
+      return {
+        ...server,
+        id,
+        name,
+        command,
+        // Sanitize args array
+        args: Array.isArray(server.args)
+          ? server.args.map(a => typeof a === 'string' ? sanitizeArg(a) : '').filter(a => a.length > 0)
+          : [],
+        // Auto-disable invalid configs
+        enabled: isValid ? server.enabled === true : false,
+        // Ensure env is object or empty
+        env: (server.env && typeof server.env === 'object') ? server.env : {}
+      };
+    });
 }
 
 // Get settings with defaults

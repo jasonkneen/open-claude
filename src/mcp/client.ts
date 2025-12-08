@@ -105,6 +105,9 @@ class MCPClient extends EventEmitter {
 
       connection.process = proc;
 
+      // Track early exit to fail fast
+      let exitError: Error | null = null;
+
       // Handle stdout (JSON-RPC responses)
       proc.stdout?.on('data', (data: Buffer) => {
         this.handleData(config.id, data);
@@ -112,23 +115,48 @@ class MCPClient extends EventEmitter {
 
       // Handle stderr (logging)
       proc.stderr?.on('data', (data: Buffer) => {
-        console.log(`[MCP ${config.name}] stderr:`, data.toString());
+        const stderr = data.toString().trim();
+        if (stderr) {
+          console.log(`[MCP ${config.name}] stderr:`, stderr);
+        }
       });
 
-      // Handle process exit
+      // Handle process exit - reject all pending requests
       proc.on('exit', (code) => {
         console.log(`[MCP ${config.name}] Process exited with code ${code}`);
         connection.isConnected = false;
+        exitError = new Error(`Process exited with code ${code}`);
+
+        // Reject all pending requests immediately
+        for (const [, pending] of connection.pendingRequests) {
+          pending.reject(exitError);
+        }
+        connection.pendingRequests.clear();
+
         this.emit('disconnected', config.id);
       });
 
       proc.on('error', (error) => {
         console.error(`[MCP ${config.name}] Process error:`, error);
         connection.isConnected = false;
+        exitError = error;
+
+        // Reject all pending requests immediately
+        for (const [, pending] of connection.pendingRequests) {
+          pending.reject(error);
+        }
+        connection.pendingRequests.clear();
+
         this.emit('error', config.id, error);
       });
 
       this.connections.set(config.id, connection);
+
+      // Small delay to check if process exits immediately
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (exitError) {
+        throw exitError;
+      }
 
       // Initialize connection with MCP protocol
       await this.initialize(config.id);
