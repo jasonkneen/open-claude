@@ -1090,10 +1090,31 @@
       border: 1px solid rgba(0, 0, 0, 0.05);
     }
 
-    .message-attachment-icon { font-size: 14px; }
-    .message-attachment-info { display: flex; flex-direction: column; gap: 2px; }
-    .message-attachment-name { font-size: 13px; font-weight: 600; color: rgba(0, 0, 0, 0.8); }
-    .message-attachment-size { font-size: 11px; color: rgba(0, 0, 0, 0.55); }
+    .message-attachment-icon {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.04);
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+    .attachment-icon-svg {
+      width: 16px;
+      height: 16px;
+      color: rgba(0, 0, 0, 0.5);
+    }
+    .message-attachment-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .message-attachment-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(0, 0, 0, 0.8);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .message-attachment-size { font-size: 11px; color: rgba(0, 0, 0, 0.45); }
 
     .send-btn {
       background: linear-gradient(145deg, #CC785C 0%, #D4846A 100%);
@@ -1803,8 +1824,14 @@
         background: rgba(255, 255, 255, 0.08);
         border-color: rgba(255, 255, 255, 0.12);
       }
+      .message-attachment-icon {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .attachment-icon-svg {
+        color: rgba(255, 255, 255, 0.5);
+      }
       .message-attachment-name { color: rgba(255, 255, 255, 0.9); }
-      .message-attachment-size { color: rgba(255, 255, 255, 0.65); }
+      .message-attachment-size { color: rgba(255, 255, 255, 0.5); }
 
       .empty-state { color: rgba(255, 255, 255, 0.5); }
       .empty-state p { color: rgba(255, 255, 255, 0.7); }

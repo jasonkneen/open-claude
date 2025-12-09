@@ -40,7 +40,27 @@ interface Conversation {
 }
 
 interface ConversationData {
+  name?: string;
   chat_messages?: Message[];
+}
+
+interface FileAsset {
+  url: string;
+  file_variant?: string;
+  primary_color?: string;
+  image_width?: number;
+  image_height?: number;
+}
+
+interface MessageFile {
+  file_kind: string;
+  file_uuid: string;
+  file_name: string;
+  created_at?: string;
+  thumbnail_url?: string;
+  preview_url?: string;
+  thumbnail_asset?: FileAsset;
+  preview_asset?: FileAsset;
 }
 
 interface Message {
@@ -48,6 +68,9 @@ interface Message {
   sender: string;
   content?: ContentBlock[];
   text?: string;
+  created_at?: string;
+  files?: MessageFile[];
+  files_v2?: MessageFile[];
 }
 
 interface ContentBlock {
@@ -637,15 +660,21 @@ function addMessage(role: string, content: string, raw = false, storedParentUuid
   if (role === 'user' && attachments.length > 0) {
     const attachmentsEl = document.createElement('div');
     attachmentsEl.className = 'message-attachments';
-    attachmentsEl.innerHTML = attachments.map(a => `
-      <div class="message-attachment-row">
-        <span class="message-attachment-icon">${a.file_type?.startsWith('image/') ? '🖼' : '📎'}</span>
-        <div class="message-attachment-info">
-          <div class="message-attachment-name">${escapeHtml(a.file_name)}</div>
-          <div class="message-attachment-size">${formatFileSize(a.file_size)}</div>
+    attachmentsEl.innerHTML = attachments.map(a => {
+      const isImage = a.file_type?.startsWith('image/');
+      const icon = isImage
+        ? `<svg class="attachment-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`
+        : `<svg class="attachment-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+      return `
+        <div class="message-attachment-row">
+          <div class="message-attachment-icon">${icon}</div>
+          <div class="message-attachment-info">
+            <div class="message-attachment-name">${escapeHtml(a.file_name)}</div>
+            ${a.file_size ? `<div class="message-attachment-size">${formatFileSize(a.file_size)}</div>` : ''}
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
     el.appendChild(attachmentsEl);
   }
 
@@ -1227,8 +1256,19 @@ async function loadConversation(convId: string) {
           } else if (msg.text) {
             text = msg.text;
           }
-          if (text) {
-            addMessage('user', text, false, prevMsgUuid);
+
+          const messageFiles = msg.files_v2 || msg.files || [];
+          const attachments: UploadedAttachment[] = messageFiles.map(f => ({
+            id: f.file_uuid,
+            document_id: f.file_uuid,
+            file_name: f.file_name,
+            file_size: 0, // Size not available in loaded messages
+            file_type: f.file_kind === 'image' ? 'image/png' : 'application/octet-stream',
+            previewUrl: f.preview_url || f.thumbnail_url
+          }));
+
+          if (text || attachments.length > 0) {
+            addMessage('user', text, false, prevMsgUuid, '', attachments);
             currentConversationMessages.push({ role: 'human', content: text, timestamp: msg.created_at });
           }
         } else {
