@@ -34,6 +34,40 @@ function sanitizeArgs(args: string[]): string[] {
   });
 }
 
+// Safe environment variables whitelist - prevents leaking sensitive data
+const SAFE_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'NODE_ENV',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+];
+
+// Build safe environment with whitelisted base vars + user-specified env
+function buildSafeEnv(userEnv?: Record<string, string>): Record<string, string> {
+  const safeEnv: Record<string, string> = {};
+
+  // Only include whitelisted environment variables
+  for (const key of SAFE_ENV_KEYS) {
+    if (process.env[key]) {
+      safeEnv[key] = process.env[key] as string;
+    }
+  }
+
+  // Merge user-specified environment variables (these are explicit, so allowed)
+  if (userEnv) {
+    Object.assign(safeEnv, userEnv);
+  }
+
+  return safeEnv;
+}
+
 class MCPClient extends EventEmitter {
   private connections: Map<string, MCPConnection> = new Map();
 
@@ -68,7 +102,7 @@ class MCPClient extends EventEmitter {
         transport = new StdioClientTransport({
           command: config.command,
           args: sanitizedArgs,
-          env: config.env ? { ...process.env, ...config.env } as Record<string, string> : undefined,
+          env: buildSafeEnv(config.env),
           stderr: 'pipe'
         });
 
@@ -140,6 +174,21 @@ class MCPClient extends EventEmitter {
     const connection = this.connections.get(serverId);
     if (!connection || !connection.isConnected) {
       throw new Error(`Server ${serverId} is not connected`);
+    }
+
+    // Validate that the tool exists on this server
+    const tool = connection.tools.find(t => t.name === toolName);
+    if (!tool) {
+      throw new Error(`Tool ${toolName} not found on server ${serverId}`);
+    }
+
+    // Validate required arguments if schema exists
+    if (tool.inputSchema?.required) {
+      for (const requiredArg of tool.inputSchema.required) {
+        if (!(requiredArg in args)) {
+          throw new Error(`Missing required argument '${requiredArg}' for tool ${toolName}`);
+        }
+      }
     }
 
     const result = await connection.client.callTool({
@@ -219,8 +268,9 @@ class MCPClient extends EventEmitter {
     }> = [];
 
     for (const { serverName, tool } of this.getAllTools()) {
+      // Use double underscore as delimiter to avoid conflicts with underscores in names
       tools.push({
-        name: `mcp_${serverName}_${tool.name}`,
+        name: `mcp__${serverName}__${tool.name}`,
         description: tool.description || `MCP tool: ${tool.name} from ${serverName}`,
         input_schema: tool.inputSchema || { type: 'object' }
       });

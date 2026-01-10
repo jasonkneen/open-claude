@@ -124,8 +124,15 @@ contextBridge.exposeInMainWorld('claude', {
   // Settings functions
   openSettings: () => ipcRenderer.invoke('open-settings'),
   getSettings: () => ipcRenderer.invoke('get-settings'),
-  saveSettings: (settings: { spotlightKeybind?: string; spotlightPersistHistory?: boolean; keyboardShortcuts?: { spotlight?: string; newConversation?: string; toggleSidebar?: string } }) =>
-    ipcRenderer.invoke('save-settings', settings),
+  saveSettings: (settings: {
+    spotlightKeybind?: string;
+    spotlightPersistHistory?: boolean;
+    keyboardShortcuts?: { spotlight?: string; newConversation?: string; toggleSidebar?: string };
+    display?: { sansFont?: string; monoFont?: string; transparency?: number };
+  }) => ipcRenderer.invoke('save-settings', settings),
+  onSettingsChanged: (callback: (settings: unknown) => void) => {
+    ipcRenderer.on('settings-changed', (_event, settings) => callback(settings));
+  },
 
   // MCP Server management
   getMCPServers: () => ipcRenderer.invoke('get-mcp-servers'),

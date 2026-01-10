@@ -100,39 +100,20 @@
               <label>Sans-Serif Font</label>
               <span class="setting-description">Font for UI text and chat messages</span>
             </div>
-            <div class="font-picker" id="sans-font-picker">
-              <input type="text" class="font-search" id="sans-font-search" placeholder="Search fonts..." autocomplete="off">
-              <div class="font-dropdown" id="sans-font-dropdown">
-                <div class="font-group">
-                  <div class="font-group-label">System Fonts</div>
-                  <div class="font-option" data-font="system" data-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">System Default</div>
-                  <div class="font-option" data-font="sf-pro" data-family="'SF Pro Display', -apple-system, sans-serif">SF Pro Display</div>
-                  <div class="font-option" data-font="helvetica" data-family="'Helvetica Neue', Helvetica, sans-serif">Helvetica Neue</div>
-                  <div class="font-option" data-font="arial" data-family="Arial, sans-serif">Arial</div>
-                  <div class="font-option" data-font="georgia" data-family="Georgia, serif">Georgia</div>
-                  <div class="font-option" data-font="times" data-family="'Times New Roman', serif">Times New Roman</div>
-                </div>
-                <div class="font-group">
-                  <div class="font-group-label">Google Fonts</div>
-                  <div class="font-option" data-font="inter" data-family="Inter, sans-serif">Inter</div>
-                  <div class="font-option" data-font="roboto" data-family="Roboto, sans-serif">Roboto</div>
-                  <div class="font-option" data-font="open-sans" data-family="'Open Sans', sans-serif">Open Sans</div>
-                  <div class="font-option" data-font="lato" data-family="Lato, sans-serif">Lato</div>
-                  <div class="font-option" data-font="poppins" data-family="Poppins, sans-serif">Poppins</div>
-                  <div class="font-option" data-font="montserrat" data-family="Montserrat, sans-serif">Montserrat</div>
-                  <div class="font-option" data-font="nunito" data-family="Nunito, sans-serif">Nunito</div>
-                  <div class="font-option" data-font="raleway" data-family="Raleway, sans-serif">Raleway</div>
-                  <div class="font-option" data-font="source-sans" data-family="'Source Sans 3', sans-serif">Source Sans</div>
-                  <div class="font-option" data-font="work-sans" data-family="'Work Sans', sans-serif">Work Sans</div>
-                  <div class="font-option" data-font="dm-sans" data-family="'DM Sans', sans-serif">DM Sans</div>
-                  <div class="font-option" data-font="outfit" data-family="Outfit, sans-serif">Outfit</div>
-                  <div class="font-option" data-font="lexend" data-family="Lexend, sans-serif">Lexend</div>
-                  <div class="font-option" data-font="plus-jakarta" data-family="'Plus Jakarta Sans', sans-serif">Plus Jakarta Sans</div>
-                  <div class="font-option" data-font="space-grotesk" data-family="'Space Grotesk', sans-serif">Space Grotesk</div>
-                  <div class="font-option" data-font="geist" data-family="Geist, sans-serif">Geist</div>
-                </div>
-              </div>
-            </div>
+            <select class="setting-select" id="sans-font-select">
+              <optgroup label="System Fonts">
+                <option value="system">System Default</option>
+                <option value="sf-pro">SF Pro Display</option>
+                <option value="helvetica">Helvetica Neue</option>
+                <option value="arial">Arial</option>
+              </optgroup>
+              <optgroup label="Popular Fonts">
+                <option value="inter">Inter</option>
+                <option value="roboto">Roboto</option>
+                <option value="open-sans">Open Sans</option>
+                <option value="poppins">Poppins</option>
+              </optgroup>
+            </select>
           </div>
 
           <div class="setting-item">
@@ -140,35 +121,19 @@
               <label>Monospace Font</label>
               <span class="setting-description">Font for code blocks and technical content</span>
             </div>
-            <div class="font-picker" id="mono-font-picker">
-              <input type="text" class="font-search" id="mono-font-search" placeholder="Search fonts..." autocomplete="off">
-              <div class="font-dropdown" id="mono-font-dropdown">
-                <div class="font-group">
-                  <div class="font-group-label">System Fonts</div>
-                  <div class="font-option" data-font="system-mono" data-family="'SF Mono', Menlo, Monaco, 'Courier New', monospace">System Default</div>
-                  <div class="font-option" data-font="sf-mono" data-family="'SF Mono', monospace">SF Mono</div>
-                  <div class="font-option" data-font="menlo" data-family="Menlo, monospace">Menlo</div>
-                  <div class="font-option" data-font="monaco" data-family="Monaco, monospace">Monaco</div>
-                  <div class="font-option" data-font="consolas" data-family="Consolas, monospace">Consolas</div>
-                  <div class="font-option" data-font="courier" data-family="'Courier New', monospace">Courier New</div>
-                </div>
-                <div class="font-group">
-                  <div class="font-group-label">Google Fonts</div>
-                  <div class="font-option" data-font="jetbrains" data-family="'JetBrains Mono', monospace">JetBrains Mono</div>
-                  <div class="font-option" data-font="fira-code" data-family="'Fira Code', monospace">Fira Code</div>
-                  <div class="font-option" data-font="source-code" data-family="'Source Code Pro', monospace">Source Code Pro</div>
-                  <div class="font-option" data-font="roboto-mono" data-family="'Roboto Mono', monospace">Roboto Mono</div>
-                  <div class="font-option" data-font="ibm-plex" data-family="'IBM Plex Mono', monospace">IBM Plex Mono</div>
-                  <div class="font-option" data-font="inconsolata" data-family="Inconsolata, monospace">Inconsolata</div>
-                  <div class="font-option" data-font="space-mono" data-family="'Space Mono', monospace">Space Mono</div>
-                  <div class="font-option" data-font="ubuntu-mono" data-family="'Ubuntu Mono', monospace">Ubuntu Mono</div>
-                  <div class="font-option" data-font="geist-mono" data-family="'Geist Mono', monospace">Geist Mono</div>
-                  <div class="font-option" data-font="cascadia" data-family="'Cascadia Code', monospace">Cascadia Code</div>
-                  <div class="font-option" data-font="victor-mono" data-family="'Victor Mono', monospace">Victor Mono</div>
-                  <div class="font-option" data-font="hack" data-family="Hack, monospace">Hack</div>
-                </div>
-              </div>
-            </div>
+            <select class="setting-select" id="mono-font-select">
+              <optgroup label="System Fonts">
+                <option value="system-mono">System Default</option>
+                <option value="sf-mono">SF Mono</option>
+                <option value="menlo">Menlo</option>
+                <option value="monaco">Monaco</option>
+              </optgroup>
+              <optgroup label="Popular Fonts">
+                <option value="jetbrains">JetBrains Mono</option>
+                <option value="fira-code">Fira Code</option>
+                <option value="source-code">Source Code Pro</option>
+              </optgroup>
+            </select>
           </div>
 
           <div class="setting-item">

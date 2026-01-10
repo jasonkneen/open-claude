@@ -82,12 +82,20 @@ const DEFAULT_KEYBOARD_SHORTCUTS = {
   toggleSidebar: 'CommandOrControl+B',
 };
 
+// Default display settings
+const DEFAULT_DISPLAY_SETTINGS = {
+  sansFont: 'system',
+  monoFont: 'system-mono',
+  transparency: 100,
+};
+
 // Default settings
 const DEFAULT_SETTINGS: SettingsSchema = {
   spotlightKeybind: 'CommandOrControl+Shift+C',
   spotlightPersistHistory: true,
   mcpServers: [],
   keyboardShortcuts: DEFAULT_KEYBOARD_SHORTCUTS,
+  display: DEFAULT_DISPLAY_SETTINGS,
 };
 
 // Sanitize a single arg by stripping surrounding quotes
@@ -448,9 +456,12 @@ ipcMain.handle('spotlight-send', async (_event, message: string) => {
     }
   };
 
+  // Get MCP tools for spotlight as well
+  const mcpTools = getMCPToolsForAPI();
+
   await streamCompletion(orgId, conversationId, message, parentMessageUuid, (chunk) => {
     processSSEChunk(chunk, state, callbacks);
-  });
+  }, { mcpTools });
 
   if (state.lastMessageUuid) {
     spotlightParentMessageUuid = state.lastMessageUuid;
@@ -799,9 +810,12 @@ ipcMain.handle('send-message', async (event, conversationId: string, message: st
   // Send Claude the uploaded file UUIDs (metadata stays client-side for display)
   const fileIds = attachments?.map(a => a.document_id).filter(Boolean) || [];
 
+  // Get all MCP tools to include in the request
+  const allMcpTools = getMCPToolsForAPI();
+
   await streamCompletion(orgId, conversationId, message, parentMessageUuid, (chunk) => {
     processSSEChunk(chunk, state, callbacks);
-  }, { attachments: [], files: fileIds });
+  }, { attachments: [], files: fileIds, mcpTools: allMcpTools });
 
   return { text: state.fullResponse, messageUuid: state.lastMessageUuid };
 });
@@ -841,7 +855,16 @@ ipcMain.handle('save-settings', async (_event, settings: Partial<SettingsSchema>
   if (settings.spotlightKeybind !== undefined) {
     registerSpotlightShortcut();
   }
-  return getSettings();
+  const updatedSettings = getSettings();
+
+  // Broadcast settings change to all main windows
+  for (const win of mainWindows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('settings-changed', updatedSettings);
+    }
+  }
+
+  return updatedSettings;
 });
 
 // Window management
@@ -938,14 +961,19 @@ ipcMain.handle('get-mcp-server-status', async () => {
 
 // Execute MCP tool
 ipcMain.handle('execute-mcp-tool', async (_event, toolName: string, args: Record<string, unknown>) => {
-  // Parse the tool name to find the server (format: mcp_serverName_toolName)
-  const parts = toolName.split('_');
-  if (parts.length < 3 || parts[0] !== 'mcp') {
-    throw new Error(`Invalid MCP tool name: ${toolName}`);
+  // Parse the tool name to find the server (format: mcp__serverName__toolName)
+  // Using double underscore as delimiter to allow underscores in server/tool names
+  const parts = toolName.split('__');
+  if (parts.length !== 3 || parts[0] !== 'mcp') {
+    throw new Error(`Invalid MCP tool name format: ${toolName}. Expected format: mcp__serverName__toolName`);
   }
 
   const serverName = parts[1];
-  const actualToolName = parts.slice(2).join('_');
+  const actualToolName = parts[2];
+
+  if (!serverName || !actualToolName) {
+    throw new Error(`Invalid MCP tool name: missing server name or tool name in ${toolName}`);
+  }
 
   // Find the server connection by name
   const connections = mcpClient.getAllConnections();

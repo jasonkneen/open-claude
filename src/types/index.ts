@@ -14,12 +14,20 @@ export interface KeyboardShortcuts {
   toggleSidebar: string;
 }
 
+// Display settings configuration
+export interface DisplaySettings {
+  sansFont: string;
+  monoFont: string;
+  transparency: number;
+}
+
 // Settings schema
 export interface SettingsSchema {
   spotlightKeybind: string;
   spotlightPersistHistory: boolean;
   mcpServers: MCPServerConfig[];
   keyboardShortcuts: KeyboardShortcuts;
+  display: DisplaySettings;
 }
 
 // Store schema for electron-store

@@ -210,6 +210,17 @@ export async function makeRequest(
   });
 }
 
+// MCP tool format for Claude API
+interface MCPToolForAPI {
+  name: string;
+  description: string;
+  input_schema: {
+    type: string;
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+}
+
 // Stream response for completion endpoint
 export async function streamCompletion(
   orgId: string,
@@ -221,6 +232,7 @@ export async function streamCompletion(
     attachments?: AttachmentPayload[];
     files?: Array<AttachmentPayload | string>;
     sync_sources?: unknown[];
+    mcpTools?: MCPToolForAPI[];
   } = {}
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -245,6 +257,21 @@ export async function streamCompletion(
 
     const files = (options.files || []).map((file) => typeof file === 'string' ? file : file.document_id);
 
+    // Build tools array: built-in tools + MCP tools
+    const builtInTools = [
+      { type: 'web_search_v0', name: 'web_search' },
+      { type: 'artifacts_v0', name: 'artifacts' },
+      { type: 'repl_v0', name: 'repl' }
+    ];
+
+    // Convert MCP tools to Claude API format
+    const mcpToolsFormatted = (options.mcpTools || []).map(tool => ({
+      type: 'custom',
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.input_schema
+    }));
+
     const body = {
       prompt,
       parent_message_uuid: parentMessageUuid === conversationId ? null : parentMessageUuid,
@@ -260,11 +287,7 @@ export async function streamCompletion(
         isDefault: true
       }],
       locale: 'en-US',
-      tools: [
-        { type: 'web_search_v0', name: 'web_search' },
-        { type: 'artifacts_v0', name: 'artifacts' },
-        { type: 'repl_v0', name: 'repl' }
-      ],
+      tools: [...builtInTools, ...mcpToolsFormatted],
       attachments: options.attachments || [],
       files,
       sync_sources: options.sync_sources || [],

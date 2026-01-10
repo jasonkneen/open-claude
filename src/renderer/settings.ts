@@ -8,11 +8,25 @@ interface KeyboardShortcuts {
   toggleSidebar: string;
 }
 
+interface DisplaySettings {
+  sansFont: string;
+  monoFont: string;
+  transparency: number;
+}
+
 interface Settings {
   spotlightKeybind: string;
   spotlightPersistHistory: boolean;
   keyboardShortcuts: KeyboardShortcuts;
+  display: DisplaySettings;
 }
+
+// Default display settings
+const DEFAULT_DISPLAY: DisplaySettings = {
+  sansFont: 'system',
+  monoFont: 'system-mono',
+  transparency: 100,
+};
 
 // Default keyboard shortcuts
 const DEFAULT_SHORTCUTS: KeyboardShortcuts = {
@@ -140,6 +154,11 @@ async function loadSettings() {
     if (currentSettings.spotlightKeybind) {
       currentSettings.keyboardShortcuts.spotlight = currentSettings.spotlightKeybind;
     }
+  }
+
+  // Ensure display settings exist with defaults
+  if (currentSettings && !currentSettings.display) {
+    currentSettings.display = { ...DEFAULT_DISPLAY };
   }
 
   updateDisplayValues();
@@ -492,67 +511,43 @@ function initializeTabs() {
   });
 }
 
-// Font picker functionality
-function initializeFontPickers() {
-  const fontPickers = document.querySelectorAll('.font-picker');
+// Save display settings
+async function saveDisplaySettings(updates: Partial<DisplaySettings>) {
+  if (!currentSettings) return;
 
-  fontPickers.forEach(picker => {
-    const search = picker.querySelector('.font-search') as HTMLInputElement;
-    const dropdown = picker.querySelector('.font-dropdown') as HTMLElement;
-    const options = picker.querySelectorAll('.font-option');
+  const display = { ...DEFAULT_DISPLAY, ...currentSettings.display, ...updates };
+  currentSettings = await claude.saveSettings({ display });
+}
 
-    if (!search || !dropdown) return;
+// Get current display settings
+function getDisplaySettings(): DisplaySettings {
+  return currentSettings?.display || DEFAULT_DISPLAY;
+}
 
-    // Show dropdown on focus
-    search.addEventListener('focus', () => {
-      picker.classList.add('open');
+// Font select functionality
+function initializeFontSelects() {
+  const sansSelect = document.getElementById('sans-font-select') as HTMLSelectElement;
+  const monoSelect = document.getElementById('mono-font-select') as HTMLSelectElement;
+
+  if (sansSelect) {
+    // Load saved value
+    sansSelect.value = getDisplaySettings().sansFont;
+
+    // Save on change
+    sansSelect.addEventListener('change', () => {
+      saveDisplaySettings({ sansFont: sansSelect.value });
     });
+  }
 
-    // Filter options on input
-    search.addEventListener('input', () => {
-      const query = search.value.toLowerCase();
-      options.forEach(opt => {
-        const text = opt.textContent?.toLowerCase() || '';
-        (opt as HTMLElement).classList.toggle('hidden', !text.includes(query));
-      });
+  if (monoSelect) {
+    // Load saved value
+    monoSelect.value = getDisplaySettings().monoFont;
 
-      // Show/hide group labels based on visible options
-      const groups = dropdown.querySelectorAll('.font-group');
-      groups.forEach(group => {
-        const visibleOptions = group.querySelectorAll('.font-option:not(.hidden)');
-        (group as HTMLElement).style.display = visibleOptions.length > 0 ? 'block' : 'none';
-      });
+    // Save on change
+    monoSelect.addEventListener('change', () => {
+      saveDisplaySettings({ monoFont: monoSelect.value });
     });
-
-    // Select option on click
-    options.forEach(opt => {
-      opt.addEventListener('click', () => {
-        const fontName = opt.textContent || '';
-        const fontFamily = (opt as HTMLElement).dataset.family || '';
-        search.value = fontName;
-        options.forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-        picker.classList.remove('open');
-
-        // Preview the font
-        (opt as HTMLElement).style.fontFamily = fontFamily;
-      });
-    });
-
-    // Close dropdown on click outside
-    document.addEventListener('click', (e) => {
-      if (!picker.contains(e.target as Node)) {
-        picker.classList.remove('open');
-      }
-    });
-
-    // Set initial value to first option
-    const firstOption = options[0];
-    if (firstOption) {
-      search.value = firstOption.textContent || 'System Default';
-      firstOption.classList.add('selected');
-    }
-  });
+  }
 }
 
 // Slider functionality
@@ -561,8 +556,19 @@ function initializeSliders() {
   const transparencyValue = document.getElementById('transparency-value') as HTMLElement;
 
   if (transparencySlider && transparencyValue) {
+    // Load saved value
+    const savedTransparency = getDisplaySettings().transparency;
+    transparencySlider.value = String(savedTransparency);
+    transparencyValue.textContent = `${savedTransparency}%`;
+
+    // Update display on input
     transparencySlider.addEventListener('input', () => {
       transparencyValue.textContent = `${transparencySlider.value}%`;
+    });
+
+    // Save on change (when user releases slider)
+    transparencySlider.addEventListener('change', () => {
+      saveDisplaySettings({ transparency: parseInt(transparencySlider.value, 10) });
     });
   }
 }
@@ -578,11 +584,11 @@ signOutBtn?.addEventListener('click', async () => {
 });
 
 // Load settings on page load
-window.addEventListener('load', () => {
-  loadSettings();
+window.addEventListener('load', async () => {
+  await loadSettings();
   loadMCPServers();
   initializeKeybindInputs();
   initializeTabs();
-  initializeFontPickers();
+  initializeFontSelects();
   initializeSliders();
 });

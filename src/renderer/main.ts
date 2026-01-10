@@ -2274,8 +2274,64 @@ function getSelectedMCPTools(): Array<{ serverId: string; toolName: string }> {
   return tools;
 }
 
+// Font family mappings
+const FONT_FAMILIES: Record<string, string> = {
+  'system': "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  'sf-pro': "'SF Pro Display', -apple-system, sans-serif",
+  'helvetica': "'Helvetica Neue', Helvetica, sans-serif",
+  'arial': "Arial, sans-serif",
+  'inter': "Inter, sans-serif",
+  'roboto': "Roboto, sans-serif",
+  'open-sans': "'Open Sans', sans-serif",
+  'poppins': "Poppins, sans-serif",
+  'system-mono': "'SF Mono', Menlo, Monaco, 'Courier New', monospace",
+  'sf-mono': "'SF Mono', monospace",
+  'menlo': "Menlo, monospace",
+  'monaco': "Monaco, monospace",
+  'jetbrains': "'JetBrains Mono', monospace",
+  'fira-code': "'Fira Code', monospace",
+  'source-code': "'Source Code Pro', monospace",
+};
+
+// Apply display settings to the page
+async function applyDisplaySettings() {
+  try {
+    const settings = await window.claude.getSettings();
+    const display = settings?.display;
+    if (!display) return;
+
+    const root = document.documentElement;
+
+    // Apply sans-serif font
+    if (display.sansFont && FONT_FAMILIES[display.sansFont]) {
+      root.style.setProperty('--font-sans', FONT_FAMILIES[display.sansFont]);
+      document.body.style.fontFamily = FONT_FAMILIES[display.sansFont];
+    }
+
+    // Apply monospace font
+    if (display.monoFont && FONT_FAMILIES[display.monoFont]) {
+      root.style.setProperty('--font-mono', FONT_FAMILIES[display.monoFont]);
+    }
+
+    // Apply transparency
+    if (display.transparency !== undefined) {
+      root.style.setProperty('--window-opacity', `${display.transparency / 100}`);
+    }
+  } catch (e) {
+    console.error('Failed to apply display settings:', e);
+  }
+}
+
 // Initialize
 async function init() {
+  // Apply display settings first
+  await applyDisplaySettings();
+
+  // Listen for settings changes from settings window
+  window.claude.onSettingsChanged(() => {
+    applyDisplaySettings();
+  });
+
   // Initialize tabs
   initTabs();
 
